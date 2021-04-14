@@ -5,7 +5,8 @@ typedef enum em_type{
     
     SET_NICKNAME,
     LIST_ALL_CLIENT,
-    PRIVATE_MESSAGE
+    PRIVATE_MESSAGE,
+    PUBLIC_MESSAGE
 
 }message_type;
 
@@ -20,4 +21,5 @@ typedef struct message {
 
 //function 
 int removen(char *msg);
+int removen_and_space(char *msg);
 #endif

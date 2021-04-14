@@ -10,13 +10,14 @@
 #include "../flagMsg/st_msg.h"
 
 //color
-#define RED  "\x1B[31m"
-#define GRN  "\x1B[32m"
-#define YEL  "\x1B[33m"
-#define BLU  "\x1B[34m"
-#define MAG  "\x1B[35m"
-#define CYN  "\x1B[36m"
-#define WHT  "\x1B[37m"
+#define RED  "\x1B[0;31m"
+#define GRN  "\x1B[22;32m"
+#define YEL  "\x1B[0;33m"
+#define BLU  "\x1B[0;34m"
+#define MAG  "\x1B[0;35m"
+#define UMAG  "\x1B[4;35m"
+#define CYN  "\x1B[0;36m"
+#define WHT  "\x1B[0;37m"
 #define RESET "\033[0m"
 
 //function
@@ -66,13 +67,14 @@ void initialize_connection(struct sockaddr_in* server)
 
 void take_input()
 {
-    char nickname[1024];//temporany solution
+    char nickname[1024];//temporary solution
     char choise[1024];
     print_menu();
     chose_nickname(nickname);
 
-   pthread_t tid;
-   pthread_create(&tid,NULL,t_recive_message,NULL);
+    //create a thread that wait in backgroud the message from the server
+    pthread_t tid;
+    pthread_create(&tid,NULL,t_recive_message,NULL);
 
     while(1)
     {
@@ -84,7 +86,7 @@ void take_input()
         {
             printf(BLU"\n/l"RESET":list all client\n"
                    BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
-                   BLU"/p"RESET":send public message\n");
+                   BLU"/p"RESET":send public message: usage"BLU" /p<message>\n"RESET);
 
         }else if(choise[0]=='@')
         {
@@ -93,7 +95,9 @@ void take_input()
 
             char *s_username;
             char *s_msg;
-
+            
+            //s_username takes the username(stops to first space), choise + 1 because '@' not needet
+            //s_msg takes the rest of the string 
             s_username=strtok(choise+1," ");
             s_msg=strtok(NULL,"");
 
@@ -118,6 +122,28 @@ void take_input()
             msg.type=LIST_ALL_CLIENT;
 
             //prepare the srtucture to send 
+            send(sd,(void*)&msg,sizeof(msg),0);
+            
+        }else if(strcmp(choise,"/p"))
+        {
+            Message msg;
+            msg.type=PUBLIC_MESSAGE;
+
+            char *s_msg;
+            char *not_need;
+
+            //start of the string, until the first space not neddet
+            not_need=strtok(choise," ");
+            //s_msg takes the rest of the string
+            s_msg=strtok(NULL,"");
+
+            //check error on message
+            if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
+            
+            //set message
+            strcpy(msg.data,s_msg);
+            strncpy(msg.nickname,nickname,24);
+            //send message
             send(sd,(void*)&msg,sizeof(msg),0);
             
         }
@@ -185,9 +211,9 @@ void print_menu()
     printf(YEL"**********************\n"RESET
            CYN"Welcome to symply chat\n"RESET
            YEL"**********************\n"RESET
-           "Type /help to see all the option\n"
-           "usage @<nickname> <message> for send private message\n"
-           "First chose a nickname: ");
+           "Type"BLU" /help "RESET"to see all the option\n"
+           "usage"BLU" @<nickname> <message> "RESET"for send private message\n"
+           "First choose a nickname: ");
     fflush(stdout);
 }
 
@@ -197,19 +223,23 @@ void chose_nickname(char *nick)
 
     while (1)
     {
-        fgets(nick,1024,stdin);//temporany solution
-        removen(nick);
+        fgets(nick,1024,stdin);//temporary solution
+        
+        //remove space or '\n' or '\t' or '\r'
+        removen_and_space(nick);
 
-        if(strlen(nick)>24 || nick == NULL || strlen(nick)==0)
+        //control the size of the string
+        if(strlen(nick)>24 || nick == NULL || strlen(nick)<4)
         {
-            printf("The distance must be between 1 and 24\n");
+            printf("The lenght must be between 4 and 24\n");
 
         }else
         {
+            //prepare the message
             msg.type=SET_NICKNAME;
             strcpy(msg.nickname,nick);
             
-            fflush(stdout);
+            //send
             send(sd,(void*)&msg,sizeof(msg),0); 
             break;       
         }
@@ -238,20 +268,39 @@ void *t_recive_message(void *arg)
             //first recv the nuber of all connected client
             number_client=atoi(msg.data);
             
-            printf(CYN"List of all client connected\n"RESET);
-            for (size_t i = 0; i < number_client; i++)
+            if(number_client > 0)
             {
-                bytes_returned = recv(sd,(void*)&msg,sizeof(msg),0);
-                if(bytes_returned<=0) {printf(RED"Cannot recive data from server\n"RESET); quit();}
-                printf(MAG"%s\n"RESET,msg.nickname);
+                printf(CYN"List of all client connected\n"RESET);
+                while(number_client > 0)
+                {
+                    bytes_returned = recv(sd,(void*)&msg,sizeof(msg),0);
+                    if(bytes_returned<=0) {printf(RED"Cannot recive data from server\n"RESET); quit();}
+                    
+                    printf(MAG"%s\n"RESET,msg.nickname);
+                    fflush(stdout);
+                    number_client--;
+                }
+                printf(CYN"End of list\n"RESET);
                 fflush(stdout);
+            }else
+            {
+                printf("No one is connected\n");
             }
+            
             break;
         
         case PRIVATE_MESSAGE:
-            printf(YEL"%s:"RESET GRN"%s\n"RESET,msg.nickname,msg.data);
+            
+            printf(YEL"%s:"RESET BLU"%s\n"RESET,msg.nickname,msg.data);
             fflush(stdout);
             break;
+        
+        case PUBLIC_MESSAGE:
+            
+            printf(UMAG"Public mex from"YEL"[%s]:"RED"%s\n"RESET,msg.nickname,msg.data);
+            fflush(stdout);
+            break;
+        
         default:
             break;
         }

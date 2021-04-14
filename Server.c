@@ -22,13 +22,16 @@ Client *root;
 Client *now;
 int count_client;
 
-//function
+//functions
 void handler(int sign); 
 void initialize_server(struct sockaddr_in *server,int *sd);
 void connection(int* sd,struct sockaddr_in* client,socklen_t *client_len);
 void *manage_thread(void *arg);
+
+//function for manage connection
 ssize_t send_private_message(char *chat, char *nickname,char *my_nick);
-ssize_t send_all_client_nick(int sd);
+ssize_t send_all_client_nick(int sd, char *my_nick);
+ssize_t send_public_message(char *chat, char *sent_from,char *my_nick);
 
 int main()
 {
@@ -58,7 +61,7 @@ void handler(int sign)
         Client *tmp;
         while (root != NULL)
         {
-            printf("Close sd:%d\n",root->t_sd);
+            printf("\nClose sd:%d",root->t_sd);
             close(root->t_sd);
             tmp=root;
             root=root->nextPtr;
@@ -84,7 +87,7 @@ void initialize_server(struct sockaddr_in *server,int *sd)
 
 void connection(int* sd,struct sockaddr_in* client,socklen_t *client_len)
 {
-    printf("waiting client.......\n");
+    printf("waiting client.......\n\n");
 
     int connect;
     
@@ -108,6 +111,7 @@ void connection(int* sd,struct sockaddr_in* client,socklen_t *client_len)
             printf("error to create thread: %s",strerror(err));
             exit(EXIT_FAILURE);
         }
+
     }
     
 }
@@ -130,10 +134,15 @@ void *manage_thread(void *arg)
     
     //message send
     Message msg;
+    
+    //In case mgs.type == LIST_ALL_CLIENT
+    //Send all client number - 1, not_me decreases its value
+    int not_me;
 
     while (recv(t_client->t_sd,NULL,1,MSG_PEEK | MSG_DONTWAIT)!=0)
     {
-        if((nread=recv(t_client->t_sd,(void*)&msg,sizeof(msg),0))<=0) {perror(RED"ERROR:recive client data"RESET); break;}
+
+        if((nread=recv(t_client->t_sd,(void*)&msg,sizeof(msg),0))<=0) {perror(RED"\nERROR:recive client data"RESET); break;}
 
         switch (msg.type)
         {
@@ -141,23 +150,38 @@ void *manage_thread(void *arg)
             
             //save nickname
             strcpy(t_client->nickname,msg.nickname);
+            printf("New connection from: [%s]\n",t_client->nickname);
             break;
         
         case PRIVATE_MESSAGE:
+            
+            //send private message
             send_private_message(msg.data,msg.nickname,t_client->nickname);
             break;
 
         case LIST_ALL_CLIENT:
             
-            //set char *msg.data to value of count_client
-            sprintf(msg.data,"%d",count_client);
-            
+            //set char *msg.data to value of not_me - 1
+            not_me=count_client;
+            --not_me;
+            sprintf(msg.data,"%d",not_me);
+             
             //send client number
-            if((nread=send(t_client->t_sd,(void*)&msg,sizeof(msg),0))<0){perror(RED"Cannot send data to client"); break;}
-
-            //send all client nickname    
-            if((nread=send_all_client_nick(t_client->t_sd))<0){perror(RED"Cannot send data to client"); break;};
+            if((nread=send(t_client->t_sd,(void*)&msg,sizeof(msg),0))<0){perror(RED"\nCannot send data to client"); break;}   
+           
+            //if number of client is gt 0 , send client's nickname
+            if(not_me > 0)
+            {
+                //send all client nickname    
+                if((nread=send_all_client_nick(t_client->t_sd,t_client->nickname))<0){perror(RED"\nCannot send data to client"); break;};
+            }
+            
             break; 
+        
+        case PUBLIC_MESSAGE:
+
+            send_public_message(msg.data,msg.nickname,t_client->nickname);
+            break;
         
         default:
             break;
@@ -168,15 +192,14 @@ void *manage_thread(void *arg)
         if(nread<=0) {break;}
     }
 
+    printf(RED"Connection lost from: "RESET"[%s]\n\n"RESET,t_client->nickname);
+    fflush(stdout);
+
     //empty all buffs
-    memset(t_client->first_number,0,strlen(t_client->first_number));
-    memset(t_client->second_number,0,strlen(t_client->second_number));
     memset(t_client->nickname,0,NICKNAMESIZE);
 
-    //close connection
+    //close socket
     //delete the client from the client_list
-    printf("Connection lost\n");
-    fflush(stdout);
     close(t_client->t_sd);
 
     pthread_mutex_lock(&client_list_mutex);
@@ -217,11 +240,10 @@ ssize_t send_private_message(char *chat, char *nickname, char *my_nick)
         strcpy(f_nick,find_nick->nickname);        
         strcpy(reject_ip,find_nick->ip);
     }
-    printf("exit\n");//DEBUG
     return byte_send;
 }
 
-ssize_t send_all_client_nick(int sd)
+ssize_t send_all_client_nick(int sd,char *my_nick)
 {
     Message msg;
     ssize_t bytes_retured;
@@ -231,13 +253,47 @@ ssize_t send_all_client_nick(int sd)
     strcpy(reject_ip,current->ip);
 
     while (strcmp(reject_ip,root->ip)!=0)
-    {
+    {  
         strcpy(msg.nickname,current->nickname);
-        bytes_retured=send(sd,(void*)&msg,sizeof(msg),0);
-        if(bytes_retured<=0) {printf("Error to send message to client\n"); return bytes_retured;}
+
+        if(strcmp(current->nickname,my_nick)!=0)
+        {
+            bytes_retured=send(sd,(void*)&msg,sizeof(msg),0);
+            if(bytes_retured<=0) {printf("Error to send message to client\n"); return bytes_retured;}
+        }
        
         current=current->previusPtr;
         strcpy(reject_ip,current->ip);
+    }
+    
+    return bytes_retured;
+}
+
+ssize_t send_public_message(char *chat, char *sent_from, char *my_nick)
+{
+    Message msg;
+    ssize_t bytes_retured;
+    char reject_ip[INET_ADDRSTRLEN];
+
+    //set message
+    msg.type=PUBLIC_MESSAGE;
+    strcpy(msg.data,chat);
+    strcpy(msg.nickname,sent_from);
+
+    //set pointer fro scroll the list
+    Client *currentPtr=now;
+    strcpy(reject_ip,currentPtr->ip);
+
+    //scroll the list
+    while (strcmp(reject_ip,root->ip)!=0)
+    {
+        if (strcmp(currentPtr->nickname,my_nick)!=0)
+        {
+            if((bytes_retured=send(currentPtr->t_sd,(void*)&msg,sizeof(msg),0))<0){printf("Error to send message\n");return bytes_retured;}
+        }
+        
+        currentPtr=currentPtr->previusPtr;
+        strcpy(reject_ip,currentPtr->ip);
     }
     
     return bytes_retured;

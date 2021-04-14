@@ -9,8 +9,6 @@ typedef struct client{
     struct client *previusPtr;
     char nickname[NICKNAMESIZE];
     char ip[INET_ADDRSTRLEN];
-    char first_number[4];
-    char second_number[4];
     int t_sd;
 }Client;
 
