@@ -16,16 +16,19 @@
 
 //light
 pthread_mutex_t client_list_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t room_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 //global vairable
 Client *root;
 Client *now;
+Room *r_root;
+Room *r_now;
 int count_client;
 
 //functions
 void handler(int sign); 
 void initialize_server(struct sockaddr_in *server,int *sd);
-void connection(int* sd,struct sockaddr_in* client,socklen_t *client_len);
+void connection(int* sd,struct sockaddr_in *client,socklen_t *client_len);
 void *manage_thread(void *arg);
 
 //function for manage connection
@@ -181,6 +184,24 @@ void *manage_thread(void *arg)
         case PUBLIC_MESSAGE:
 
             send_public_message(msg.data,msg.nickname,t_client->nickname);
+            break;
+        
+        case CREATE_ROOM:
+            
+            pthread_mutex_lock(&room_list_mutex);
+
+            insert_room(&r_root,&r_now,msg.rm_name,msg.rm_pswd,t_client->nickname);
+            t_client->chat_room = r_now;
+            r_now->c_list[0] = t_client;
+            pthread_mutex_unlock(&room_list_mutex);
+            
+            printf("Room name:%s, Room_pass:%s, Room_own:%s, Firs_client_name:%s\n",r_now->name,r_now->psw,r_now->owner,r_now->c_list[0]->nickname);//DEBUG
+            printf("Client is in room:%s\n",t_client->chat_room->name);//DEBUG
+            printf("Room deleted\n");//DEBUG
+            break;
+        
+        case JOIN_ROOM:
+            //do something
             break;
         
         default:

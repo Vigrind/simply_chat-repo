@@ -3,7 +3,7 @@
 #include <string.h>
 #include "manage_client.h"
 
-
+//client functions
 Client* insert(char *ip,int sd)
 {
     Client *nowptr=(Client *)malloc(sizeof(Client));
@@ -33,30 +33,73 @@ void delete_client(Client **delete, Client **now)
     }
 }
 
-int substring(char *msg,char *first_number, char *second_number)
+//Room functions
+void insert_room(Room **root,Room **now, char *name,char *pssw,char *own)
 {
-    int j = 0;
-
-    while (*msg != '\0')
+    Room *newPtr=(Room *)malloc(sizeof(Room));
+    
+    if(newPtr == NULL)
     {
-        if (*msg=='-')
-        {
-            ++msg;
-            while (*msg != '\0')
-            {
-                second_number[j]=*msg;
-                j++;
-                msg++;
-            }
-            return 0;
+        printf("No memory aviable\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    strncpy(newPtr->name,name,24);
+    strncpy(newPtr->psw,pssw,24);
+    strncpy(newPtr->owner,own,24);
+    newPtr->nextPtr=NULL;
+    newPtr->previusPtr=NULL;
 
-        }else
-        {
-            *first_number=*msg;
-            first_number++;
-        }
-        msg++;
+    if ((*root)==NULL)
+    {
+        (*root)=newPtr;
+        (*now)=(*root);
+    
+    }else{
+        newPtr->previusPtr=(*now);
+        (*now)->nextPtr=newPtr;
+        (*now) = newPtr;
+    }
+    
+}
+
+void delete_room(Room **now,Room **root,char *name)
+{   
+    Room *delete = (*now);
+    
+    while (strcmp(delete->name,name) && delete != NULL)
+    {
+        
+        if(delete->previusPtr == NULL) break;
+        
+        delete = delete->previusPtr;
     }
 
-    return 0;
+    if(delete==(*now) && delete->name == name && delete==(*root))
+    {
+        free(delete); 
+    
+    }else if(delete==(*now) && delete->name == name)
+    {   
+       
+        (*now) = delete->previusPtr;
+        (*now)->nextPtr = NULL;
+        free(delete);
+        
+    }else if(delete != (*now) && delete->name == name){
+      
+        if(delete == (*root))
+        {
+       
+            (*root) = delete->nextPtr;
+            (*root)->previusPtr = NULL;
+            free(delete); 
+
+        }else{
+           
+            delete->previusPtr->nextPtr = delete->nextPtr;
+            delete->nextPtr->previusPtr = delete->previusPtr;
+            free(delete);
+        }
+    }
 }

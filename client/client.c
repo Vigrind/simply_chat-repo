@@ -20,14 +20,22 @@
 #define WHT  "\x1B[0;37m"
 #define RESET "\033[0m"
 
-//function
+//functions
 void initialize_connection(struct sockaddr_in*);
 void take_input();
 void handler(int sig);
-void setTimeout(int milliseconds);
+
+//menu functions
 void print_menu();
 void chose_nickname(char *nick);
 void quit();
+void help();
+
+//menu action functions
+void send_private_message(char *chooise);
+void send_public_message(char *chooise, char *nick);
+void send_list_all();
+void create_room(char *chooise, char *nick);
 
 //thread function
 void *t_recive_message(void *arg);
@@ -84,68 +92,23 @@ void take_input()
 
         if(strcmp(choise,"/help")==0)
         {
-            printf(BLU"\n/l"RESET":list all client\n"
-                   BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
-                   BLU"/p"RESET":send public message: usage"BLU" /p<message>\n"RESET);
+            help();
 
         }else if(choise[0]=='@')
         {
-            Message msg;
-            msg.type=PRIVATE_MESSAGE;
-
-            char *s_username;
-            char *s_msg;
-            
-            //s_username takes the username(stops to first space), choise + 1 because '@' not needet
-            //s_msg takes the rest of the string 
-            s_username=strtok(choise+1," ");
-            s_msg=strtok(NULL,"");
-
-            //check error on username
-            if(strlen(s_username)>24) {printf(RED"ERROR: Username must have max 24 characters"RESET); kill(getpid(),SIGUSR1);}
-            if(strlen(s_username)==0) {printf("Insert Username\n"); break;}
-            if(s_username==NULL) {printf(RED"ERROR: Format is @<username><message>"RESET); kill(getpid(),SIGUSR1);}
-
-            //check error on message
-            if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
-
-            //prepare the srtucture to send 
-            strcpy(msg.nickname,s_username);
-            strcpy(msg.data,s_msg);
-
-            //send the structure
-            send(sd,(void*)&msg,sizeof(msg),0);
+            send_private_message(choise);
 
         }else if(strcmp(choise,"/l")==0)
         {
-            Message msg;
-            msg.type=LIST_ALL_CLIENT;
-
-            //prepare the srtucture to send 
-            send(sd,(void*)&msg,sizeof(msg),0);
+            send_list_all();
             
-        }else if(strcmp(choise,"/p"))
+        }else if(strncmp(choise,"/p",2)==0)
         {
-            Message msg;
-            msg.type=PUBLIC_MESSAGE;
-
-            char *s_msg;
-            char *not_need;
-
-            //start of the string, until the first space not neddet
-            not_need=strtok(choise," ");
-            //s_msg takes the rest of the string
-            s_msg=strtok(NULL,"");
-
-            //check error on message
-            if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
-            
-            //set message
-            strcpy(msg.data,s_msg);
-            strncpy(msg.nickname,nickname,24);
-            //send message
-            send(sd,(void*)&msg,sizeof(msg),0);
-            
+            send_public_message(choise,nickname);
+        
+        }else if(strncmp(choise,"/c",2)==0)
+        {
+            create_room(choise,nickname);
         }
 
         memset(choise,0,sizeof(choise));
@@ -153,7 +116,6 @@ void take_input()
     
 }
 
-//handle a signal
 void handler(int sig)
 {
     if(sig==SIGINT)
@@ -185,27 +147,6 @@ void handler(int sig)
     }
 }
 
-void setTimeout(int milliseconds)
-{
-    // If milliseconds is less or equal to 0
-    // will be simple return from function without throw error
-    if (milliseconds <= 0) {
-        fprintf(stderr, "Count milliseconds for timeout is less or equal to 0\n");
-        return;
-    }
-
-    // a current time of milliseconds
-    int milliseconds_since = clock() * 1000 / CLOCKS_PER_SEC;
-
-    // needed count milliseconds of return from this timeout
-    int end = milliseconds_since + milliseconds;
-
-    // wait while until needed time comes
-    do {
-        milliseconds_since = clock() * 1000 / CLOCKS_PER_SEC;
-    } while (milliseconds_since <= end);
-}
-
 void print_menu()
 {
     printf(YEL"**********************\n"RESET
@@ -229,7 +170,7 @@ void chose_nickname(char *nick)
         removen_and_space(nick);
 
         //control the size of the string
-        if(strlen(nick)>24 || nick == NULL || strlen(nick)<4)
+        if(strlen(nick)>24 || strlen(nick)<4)
         {
             printf("The lenght must be between 4 and 24\n");
 
@@ -265,7 +206,7 @@ void *t_recive_message(void *arg)
         {
         case LIST_ALL_CLIENT:
         
-            //first recv the nuber of all connected client
+            //convert msg.data that contains number of client
             number_client=atoi(msg.data);
             
             if(number_client > 0)
@@ -297,7 +238,7 @@ void *t_recive_message(void *arg)
         
         case PUBLIC_MESSAGE:
             
-            printf(UMAG"Public mex from"YEL"[%s]:"RED"%s\n"RESET,msg.nickname,msg.data);
+            printf(MAG"Public mex from"YEL"[%s]:"RED"%s\n"RESET,msg.nickname,msg.data);
             fflush(stdout);
             break;
         
@@ -313,4 +254,114 @@ void quit()
 {
     close(sd);
     exit(EXIT_FAILURE);
+}
+
+void help()
+{
+    printf(BLU"\n/l"RESET":list all client\n"
+                   BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
+                   BLU"/p"RESET":send public message: usage"BLU" /p <message>\n"RESET
+                   BLU"/c"RESET":create a private room: usage"BLU"/c <name> <password>\n"RESET);
+} 
+
+void send_private_message(char *chooise)
+{
+    Message msg;
+    msg.type=PRIVATE_MESSAGE;
+
+    char *s_username;
+    char *s_msg;
+            
+    //s_username takes the username(stops to first space), choise + 1 because '@' not needet
+    //s_msg takes the rest of the string 
+    s_username=strtok(chooise+1," ");
+    s_msg=strtok(NULL,"");
+
+    //check error on username
+    if(strlen(s_username)>24) {printf(RED"ERROR: Username must have max 24 characters"RESET); kill(getpid(),SIGUSR1);}
+    if(s_username==NULL) {printf(RED"ERROR: Format is @<username><message>"RESET); kill(getpid(),SIGUSR1);}
+
+    //check error on message
+    if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
+
+    //prepare the srtucture to send 
+    strcpy(msg.nickname,s_username);
+    strcpy(msg.data,s_msg);
+
+    //send the structure
+    send(sd,(void*)&msg,sizeof(msg),0);
+}
+
+void send_list_all()
+{
+    Message msg;
+    msg.type=LIST_ALL_CLIENT;
+
+    //prepare the srtucture to send 
+    send(sd,(void*)&msg,sizeof(msg),0);
+}
+
+void send_public_message(char *chooise,char *nick)
+{
+    Message msg;
+            msg.type=PUBLIC_MESSAGE;
+
+            char *s_msg;
+            char *not_need;
+
+            //start of the string, until the first space not neddet
+            not_need=strtok(chooise," ");
+            //s_msg takes the rest of the string
+            s_msg=strtok(NULL,"");
+
+            //check error on message
+            if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
+            
+            //set message
+            strcpy(msg.data,s_msg);
+            strncpy(msg.nickname,nick,24);
+            //send message
+            send(sd,(void*)&msg,sizeof(msg),0);
+}
+
+void create_room(char *chooise, char *nick)
+{   
+    Message msg;
+    msg.type = CREATE_ROOM;
+
+    char *not_need;
+    char *s_name;
+    char *s_pass;
+
+    //start of the string, until the first space not neddet
+    not_need=strtok(chooise," ");
+    s_name=strtok(NULL," ");
+    s_pass=strtok(NULL,"");
+    
+    if (s_name == NULL)
+    {
+        printf(RED"ERROR: Format is /c <name> <pass>\n"RESET);     
+    
+    }else if(strlen(s_name)>24)
+    {
+        printf(RED"ERROR: Username must have max 24 characters\n"RESET);
+    
+    }else if(s_pass == NULL)
+    {
+        printf(RED"ERROR: Format is /c <name> <password>\n"RESET);
+    
+    }else if(strlen(s_pass)>24)
+    {
+        printf(RED"ERROR: Passwprd must have max 24 characters\n"RESET);
+    }
+    else
+    {
+        strncpy(msg.nickname,nick,24);
+        strncpy(msg.rm_name,s_name,24);
+        strncpy(msg.rm_pswd,s_pass,24);
+
+        send(sd,(void *)&msg,sizeof(msg),0);
+    }
+    
+
 }
