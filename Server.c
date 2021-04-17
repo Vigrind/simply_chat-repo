@@ -2,8 +2,8 @@
 /************************************
  * Cambiare le funzioni ss_size di public_message in void                                 
  * Gestire meglio la deallocazione della stanza
- * Gestire meglio l'invio di messaggi nella stanza
  * Nella funzione associate_c_r , gestisci meglio i return(fai le macro)
+ * Gestire meglio l'uscita dalla stanza case:EXIT_ROOM
  * **********************************
 */
 
