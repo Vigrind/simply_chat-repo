@@ -32,5 +32,8 @@ void delete_client(Client **current, Client **now);
 
 //room functions
 void insert_room(Room **root,Room **now, char *name,char *pssw,char *own);
-void delete_room(Room **now,Room **root,char *name);
+void exit_room(Client *current, char *r_name, Room *nowPtr);
+void ck_empty_room(Room **now, Room **root, char *r_name);
+int delete_room(Room **now,Room **root,char *name);
+int associate_c_r(Room *nowptr, char *r_name, char *passw, Client *client);
 #endif

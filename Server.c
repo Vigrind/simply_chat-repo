@@ -1,3 +1,12 @@
+
+/************************************
+ * Cambiare le funzioni ss_size di public_message in void                                 
+ * Gestire meglio la deallocazione della stanza
+ * Gestire meglio l'invio di messaggi nella stanza
+ * Nella funzione associate_c_r , gestisci meglio i return(fai le macro)
+ * **********************************
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,7 +18,7 @@
 #include <pthread.h>
 #include <string.h>
 #include "manage_client.h"
-#include "./flagMsg/st_msg.h"
+#include "./flagmsg/st_msg.h"
 
 #define RED  "\x1B[31m"
 #define RESET "\033[0m"
@@ -29,12 +38,15 @@ int count_client;
 void handler(int sign); 
 void initialize_server(struct sockaddr_in *server,int *sd);
 void connection(int* sd,struct sockaddr_in *client,socklen_t *client_len);
+
+//thread function
 void *manage_thread(void *arg);
 
 //function for manage connection
 ssize_t send_private_message(char *chat, char *nickname,char *my_nick);
 ssize_t send_all_client_nick(int sd, char *my_nick);
 ssize_t send_public_message(char *chat, char *sent_from,char *my_nick);
+void send_all_room(char *chat, char *sent_from, char *room_name);
 
 int main()
 {
@@ -142,6 +154,9 @@ void *manage_thread(void *arg)
     //Send all client number - 1, not_me decreases its value
     int not_me;
 
+    //for check function in case:EXIT_ROOM
+    char c_room_name[25];
+
     while (recv(t_client->t_sd,NULL,1,MSG_PEEK | MSG_DONTWAIT)!=0)
     {
 
@@ -176,34 +191,72 @@ void *manage_thread(void *arg)
             if(not_me > 0)
             {
                 //send all client nickname    
-                if((nread=send_all_client_nick(t_client->t_sd,t_client->nickname))<0){perror(RED"\nCannot send data to client"); break;};
+                if((nread=send_all_client_nick(t_client->t_sd,t_client->nickname))<0){perror(RED"\nCannot send data to client"); break;}
             }
             
             break; 
         
         case PUBLIC_MESSAGE:
 
-            send_public_message(msg.data,msg.nickname,t_client->nickname);
+            if((nread=send_public_message(msg.data,msg.nickname,t_client->nickname))<0){perror(RED"\nCannot send data to client"); break;}
             break;
         
         case CREATE_ROOM:
             
             pthread_mutex_lock(&room_list_mutex);
-
             insert_room(&r_root,&r_now,msg.rm_name,msg.rm_pswd,t_client->nickname);
             t_client->chat_room = r_now;
             r_now->c_list[0] = t_client;
             pthread_mutex_unlock(&room_list_mutex);
-            
+
             printf("Room name:%s, Room_pass:%s, Room_own:%s, Firs_client_name:%s\n",r_now->name,r_now->psw,r_now->owner,r_now->c_list[0]->nickname);//DEBUG
             printf("Client is in room:%s\n",t_client->chat_room->name);//DEBUG
-            printf("Room deleted\n");//DEBUG
+
             break;
         
         case JOIN_ROOM:
-            //do something
+            strcpy(c_room_name,msg.rm_name);
+            if ((nread=associate_c_r(r_now,msg.rm_name,msg.rm_pswd,t_client))==0)
+            {
+                msg.type=ROOM_NOT_EXISTS;
+                
+                if((nread=send(t_client->t_sd,(void *)&msg,sizeof(msg),0))<0){perror(RED"\nCannot send data to client"); break;}
+            
+            }else if (nread == 1)
+            {
+                msg.type=JOIN_ROOM;
+                if((nread=send(t_client->t_sd,(void *)&msg,sizeof(msg),0))<0){perror(RED"\nCannot send data to client"); break;}
+                
+            }else if (nread == 2)
+            {
+                msg.type=FULL_ROOM;
+                if((nread=send(t_client->t_sd,(void *)&msg,sizeof(msg),0))<0){perror(RED"\nCannot send data to client"); break;}
+            
+            }else
+            {
+                msg.type = WRONG_PWSD;
+                if((nread=send(t_client->t_sd,(void *)&msg,sizeof(msg),0))<0){perror(RED"\nCannot send data to client"); break;}
+            }
+            break;
+
+        case MSG_ROOM:
+            
+            send_all_room(msg.data,msg.nickname,t_client->chat_room->name);
             break;
         
+        case EXIT_ROOM:
+
+            printf("Name of the room:%s\n",t_client->chat_room->name);
+            exit_room(t_client,t_client->chat_room->name,r_now);
+            
+            //if the room is empty, delete the room
+            pthread_mutex_lock(&room_list_mutex);            
+            ck_empty_room(&r_now,&r_root,c_room_name);
+            pthread_mutex_unlock(&room_list_mutex);
+            
+            printf("ESCO\n");//DEBUG
+            break;
+
         default:
             break;
         }
@@ -211,6 +264,14 @@ void *manage_thread(void *arg)
         memset(msg.nickname,0,strlen(msg.nickname));
         memset(msg.data,0,strlen(msg.data));
         if(nread<=0) {break;}
+    }
+
+    //if the room is empty, delete the room
+    if(c_room_name != NULL)
+    {
+        pthread_mutex_lock(&room_list_mutex);            
+        ck_empty_room(&r_now,&r_root,c_room_name);
+        pthread_mutex_unlock(&room_list_mutex);
     }
 
     printf(RED"Connection lost from: "RESET"[%s]\n\n"RESET,t_client->nickname);
@@ -318,4 +379,37 @@ ssize_t send_public_message(char *chat, char *sent_from, char *my_nick)
     }
     
     return bytes_retured;
+}
+
+void send_all_room(char *chat, char *sent_from, char *room_name)
+{
+    Message msg;
+    msg.type=MSG_ROOM;
+    strcpy(msg.data,chat);
+    strcpy(msg.nickname,sent_from);
+
+    Room *find = r_now;
+
+    //search the name of the room
+    while (find != NULL)
+    {
+        if (strcmp(find->name,room_name)==0)
+        {
+            //iterate over each element
+            //if the element does not exist, jump to the next 
+            for (size_t i = 0; i < 100; i++)
+            {  
+                if (find->c_list[i]==NULL)
+                {
+                    i++;
+                }else
+                {
+                    send(find->c_list[i]->t_sd,(void*)&msg,sizeof(msg),0);
+                }
+            }
+                    
+        }
+        find=find->previusPtr;
+    }
+    
 }

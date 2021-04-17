@@ -8,7 +8,12 @@ typedef enum em_type{
     PRIVATE_MESSAGE,
     PUBLIC_MESSAGE,
     CREATE_ROOM,
-    JOIN_ROOM
+    JOIN_ROOM,
+    EXIT_ROOM,
+    ROOM_NOT_EXISTS,
+    FULL_ROOM,
+    WRONG_PWSD,
+    MSG_ROOM 
 
 }message_type;
 

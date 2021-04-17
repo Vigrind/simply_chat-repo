@@ -7,7 +7,7 @@
 #include <signal.h>
 #include <time.h>
 #include <pthread.h>   
-#include "../flagMsg/st_msg.h"
+#include "../flagmsg/st_msg.h"
 
 //color
 #define RED  "\x1B[0;31m"
@@ -36,12 +36,16 @@ void send_private_message(char *chooise);
 void send_public_message(char *chooise, char *nick);
 void send_list_all();
 void create_room(char *chooise, char *nick);
+void join_room(char *chooise);
+void exit_room();
+void send_room(char *chooise,char *nick);
 
 //thread function
 void *t_recive_message(void *arg);
 
 //global variable
 int sd;
+int flag_room = 0;
 
 int main()
 {
@@ -75,6 +79,7 @@ void initialize_connection(struct sockaddr_in* server)
 
 void take_input()
 {
+
     char nickname[1024];//temporary solution
     char choise[1024];
     print_menu();
@@ -90,7 +95,7 @@ void take_input()
         fgets(choise,sizeof(choise),stdin);
         removen(choise);
 
-        if(strcmp(choise,"/help")==0)
+        if(strcmp(choise,"/help")==0 && flag_room == 0)
         {
             help();
 
@@ -98,18 +103,35 @@ void take_input()
         {
             send_private_message(choise);
 
-        }else if(strcmp(choise,"/l")==0)
+        }else if(strcmp(choise,"/l")==0 && flag_room == 0)
         {
             send_list_all();
             
-        }else if(strncmp(choise,"/p",2)==0)
+        }else if(strncmp(choise,"/p",2)==0 && flag_room == 0)
         {
             send_public_message(choise,nickname);
         
-        }else if(strncmp(choise,"/c",2)==0)
+        }else if(strncmp(choise,"/c",2)==0 && flag_room == 0)
         {
+            flag_room = 1;
             create_room(choise,nickname);
+        
+        }else if (strncmp(choise,"/j",2)==0 && flag_room == 0)
+        {
+            flag_room = 1;
+            join_room(choise);
+
+        }else if (strcmp(choise,"/exit")==0 && flag_room == 1)
+        {
+            flag_room = 0;
+            exit_room();
+            printf(CYN"Exit from the room\n"RESET);
+        
+        }else if (strncmp(choise,"/p",2)==0 && flag_room == 1)
+        {
+            send_room(choise,nickname);
         }
+        
 
         memset(choise,0,sizeof(choise));
     }
@@ -242,6 +264,44 @@ void *t_recive_message(void *arg)
             fflush(stdout);
             break;
         
+        case JOIN_ROOM:
+            
+            printf(CYN"Successful room join\n"RESET);
+            fflush(stdout);
+
+            break;
+        
+        case FULL_ROOM:
+
+            flag_room = 0;
+            printf(CYN"cannot join, the room is full\n"RESET);
+            fflush(stdout);
+
+            break;
+        
+        case ROOM_NOT_EXISTS:
+            
+            flag_room = 0;
+            printf(CYN"The room doesn't exists\n"RESET);
+            fflush(stdout);
+
+            break;
+        
+        case WRONG_PWSD:
+            
+            flag_room = 0;
+            printf(CYN"Wrong Password\n"RESET);
+            fflush(stdout);
+
+            break;
+        
+        case MSG_ROOM:
+            
+            printf(MAG"Public room mex from"YEL"[%s]:"RED"%s\n"RESET,msg.nickname,msg.data);
+            fflush(stdout);
+            break;
+
+            break;
         default:
             break;
         }
@@ -261,7 +321,8 @@ void help()
     printf(BLU"\n/l"RESET":list all client\n"
                    BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
                    BLU"/p"RESET":send public message: usage"BLU" /p <message>\n"RESET
-                   BLU"/c"RESET":create a private room: usage"BLU"/c <name> <password>\n"RESET);
+                   BLU"/c"RESET":create a private room: usage"BLU"/c <name> <password>\n"RESET
+                   BLU"/j"RESET":join a room: usage"BLU" /j <room_name> <room_passwd>\n"RESET);
 } 
 
 void send_private_message(char *chooise)
@@ -344,7 +405,7 @@ void create_room(char *chooise, char *nick)
     
     }else if(strlen(s_name)>24)
     {
-        printf(RED"ERROR: Username must have max 24 characters\n"RESET);
+        printf(RED"ERROR: room_name must have max 24 characters\n"RESET);
     
     }else if(s_pass == NULL)
     {
@@ -352,7 +413,7 @@ void create_room(char *chooise, char *nick)
     
     }else if(strlen(s_pass)>24)
     {
-        printf(RED"ERROR: Passwprd must have max 24 characters\n"RESET);
+        printf(RED"ERROR: Password must have max 24 characters\n"RESET);
     }
     else
     {
@@ -364,4 +425,84 @@ void create_room(char *chooise, char *nick)
     }
     
 
+}
+
+void join_room(char *chooise)
+{
+    Message msg;
+    msg.type=JOIN_ROOM;
+
+    char *not_need;
+    char *s_name;
+    char *s_pass;
+
+    //start of the string, until the first space not neddet
+    not_need=strtok(chooise," ");
+    s_name=strtok(NULL," ");
+    s_pass=strtok(NULL,"");
+    
+    if (s_name == NULL)
+    {
+        printf(RED"ERROR: Format is /c <name> <pass>\n"RESET);
+        flag_room = 0;
+    
+    }else if(strlen(s_name)>24)
+    {
+        printf(RED"ERROR: room_name must have max 24 characters\n"RESET);
+        flag_room = 0;
+    
+    }else if(s_pass == NULL)
+    {
+        printf(RED"ERROR: Format is /c <name> <password>\n"RESET);
+        flag_room = 0;
+
+    }else if(strlen(s_pass)>24)
+    {
+        printf(RED"ERROR: Password must have max 24 characters\n"RESET);
+        flag_room = 0;
+    }
+    else
+    {
+        strncpy(msg.rm_name,s_name,24);
+        strncpy(msg.rm_pswd,s_pass,24);
+
+        send(sd,(void *)&msg,sizeof(msg),0);
+    }
+}
+
+void exit_room()
+{
+    Message msg;
+    msg.type = EXIT_ROOM;
+
+    send(sd,(void *)&msg,sizeof(msg),0);
+}
+
+void send_room(char *chooise,char *nick)
+{
+    Message msg;
+    msg.type=MSG_ROOM;
+
+    char *s_msg;
+    char *not_need;
+
+    //start of the string, until the first space not neddet
+    not_need=strtok(chooise," ");
+    //s_msg takes the rest of the string
+    s_msg=strtok(NULL,"");
+
+    //check error on message
+    if(s_msg == NULL)
+    {
+        printf(RED"ERROR: You must enter message"RESET);
+            
+    }else
+    {
+        //set message
+        strcpy(msg.data,s_msg);
+        strncpy(msg.nickname,nick,24);
+        //send message
+        send(sd,(void*)&msg,sizeof(msg),0);
+    }
+            
 }
