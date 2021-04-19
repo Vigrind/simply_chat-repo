@@ -3,6 +3,7 @@
         "st_msg.h": "c",
         "iosfwd": "c",
         "limits": "c",
-        "streambuf": "c"
+        "streambuf": "c",
+        "time.h": "c"
     }
 }

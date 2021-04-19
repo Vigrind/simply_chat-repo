@@ -7,9 +7,6 @@
 
 /************************************
  * Cambiare le funzioni ssize_t di public_message in void                                 
- * Gestire meglio la deallocazione della stanza
- * Nella funzione associate_c_r , gestisci meglio i return(fai le macro)
- * Gestire meglio l'uscita dalla stanza case:EXIT_ROOM
  * Controola i commente dei mutex per i send_all sia client che room
  * **********************************
 */
@@ -28,7 +25,7 @@
 #include "./flagmsg/st_msg.h"
 
 #define RED  "\x1B[31m"
-#define RESET "\033[0m"
+#define RESET "\x1B[0m"
 
 //light
 pthread_mutex_t mutex_client_list = PTHREAD_MUTEX_INITIALIZER;  //mutex when work with the client list
@@ -214,9 +211,9 @@ void *manage_thread(void *arg)
         
         case PUBLIC_MESSAGE:
             
-            // pthread_mutex_lock(&mutex_send_all);
+            pthread_mutex_lock(&mutex_send_all);
             if((nread=send_public_message(msg.data,msg.nickname,t_client->nickname))<0){perror(RED"\nCannot send data to client"RESET);}
-            // pthread_mutex_unlock(&mutex_send_all);
+            pthread_mutex_unlock(&mutex_send_all);
 
             break;
         
@@ -259,9 +256,9 @@ void *manage_thread(void *arg)
 
         case MSG_ROOM:
             
-            // pthread_mutex_lock(&mutex_room_all);
+            pthread_mutex_lock(&mutex_room_all);
             send_all_room(msg.data,msg.nickname,t_client->chat_room->name);
-            // pthread_mutex_unlock(&mutex_room_all);
+            pthread_mutex_unlock(&mutex_room_all);
             break;
 
         case EXIT_ROOM:

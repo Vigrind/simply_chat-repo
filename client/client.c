@@ -4,7 +4,6 @@
  * @Last Modified by: Vigrind
  * @Last Modified time: 2021-04-18 23:24:43
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,40 +12,16 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
-#include <pthread.h>   
+#include <pthread.h>
+#include "menu.h"   
 #include "../flagmsg/st_msg.h"
-
-//color
-#define YEL  "\x1B[0;33m"
-#define BLU  "\x1B[0;34m"
-#define MAG  "\x1B[0;35m"
-#define UMAG  "\x1B[4;35m"
-#define RED  "\x1B[0;31m"
-#define WHT  "\x1B[0;37m"
-#define GRN  "\x1B[0;32m"
-#define CYN  "\x1B[0;36m"
-#define RESET "\033[0m"
 
 //functions
 void initialize_connection(struct sockaddr_in*);
 void take_input();
 void handler(int sig);
-
-//menu functions
-void print_menu();
 void chose_nickname(char *nick);
 void quit();
-void help();
-
-//menu action functions
-void send_private_message(char *chooise);
-void send_public_message(char *chooise, char *nick);
-void send_list_all();
-void create_room(char *chooise, char *nick);
-void join_room(char *chooise);
-void exit_room();
-void send_room(char *chooise,char *nick);
-void list_room();
 
 //thread function
 void *t_recive_message(void *arg);
@@ -109,39 +84,39 @@ void take_input()
 
         }else if(choise[0]=='-')
         {
-            send_private_message(choise);
+            send_private_message(choise,&sd);
 
         }else if(strcmp(choise,"/l")==0 && flag_room == 0)
         {
-            send_list_all();
+            send_list_all(&sd);
             
         }else if(strcmp(choise,"/rl")==0 && flag_room == 0)
         {
-            list_room();
+            list_room(&sd);
 
         }else if(strncmp(choise,"/p",2)==0 && flag_room == 0)
         {
-            send_public_message(choise,nickname);
+            send_public_message(choise,nickname,&sd);
         
         }else if(strncmp(choise,"/c",2)==0 && flag_room == 0)
         {
             flag_room = 1;
-            create_room(choise,nickname);
+            create_room(choise,nickname,&sd,&flag_room);
 
         }else if (strncmp(choise,"/j",2)==0 && flag_room == 0)
         {
             flag_room = 1;
-            join_room(choise);
+            join_room(choise,&sd,&flag_room);
 
         }else if (strcmp(choise,"/exit")==0 && flag_room == 1)
         {
             flag_room = 0;
-            exit_room();
+            exit_room(&sd);
             printf(CYN"Exit from the room\n"RESET);
         
         }else if (choise[0]!='\0' && flag_room == 1)
         {
-            send_room(choise,nickname);
+            send_room(choise,nickname,&sd);
         }
         
 
@@ -172,23 +147,6 @@ void handler(int sig)
         close(sd);
         exit(EXIT_FAILURE);
     }
-    
-    if(sig==SIGUSR1)
-    {
-        printf("\nsorry\n");
-        close(sd);
-        exit(EXIT_FAILURE);
-    }
-}
-
-void print_menu()
-{
-    printf(YEL"**********************\n"RESET
-           CYN"Welcome to symply chat\n"RESET
-           YEL"**********************\n"RESET
-           "Type"BLU" /help "RESET"to see all the option\n"
-           "First choose a nickname: ");
-    fflush(stdout);
 }
 
 void chose_nickname(char *nick)
@@ -315,195 +273,4 @@ void quit()
 {
     close(sd);
     exit(EXIT_FAILURE);
-}
-
-void help()
-{
-    printf(BLU"\n/l"RESET":list all client\n"
-           BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
-           BLU"/p"RESET":send public message:"BLU" /p <message>\n"RESET
-           BLU"/c"RESET":create a private room:"BLU"/c <name> <password>\n"RESET
-           BLU"/j"RESET":join a room:"BLU" /j <room_name> <room_passwd>\n"RESET
-           BLU"-"RESET":send private message:"BLU" -<nickname> <message>\n"RESET
-           BLU"/rl"RESET":list all room\n");
-} 
-
-void send_private_message(char *chooise)
-{
-    Message msg;
-    msg.type=PRIVATE_MESSAGE;
-
-    char *s_username;
-    char *s_msg;
-            
-    //s_username takes the username(stops to first space), choise + 1 because '@' not needet
-    //s_msg takes the rest of the string 
-    s_username=strtok(chooise+1," ");
-    s_msg=strtok(NULL,"");
-
-    //check error on username
-    if(strlen(s_username)>24) {printf(RED"ERROR: Username must have max 24 characters"RESET); kill(getpid(),SIGUSR1);}
-    if(s_username==NULL) {printf(RED"ERROR: Format is @<username><message>"RESET); kill(getpid(),SIGUSR1);}
-
-    //check error on message
-    if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
-
-    //prepare the srtucture to send 
-    strcpy(msg.nickname,s_username);
-    strcpy(msg.data,s_msg);
-
-    //send the structure
-    send(sd,(void*)&msg,sizeof(msg),0);
-}
-
-void send_list_all()
-{
-    Message msg;
-    msg.type=LIST_ALL_CLIENT;
-
-    //prepare the srtucture to send 
-    send(sd,(void*)&msg,sizeof(msg),0);
-    printf(CYN"List all client\n"RESET);
-}
-
-void send_public_message(char *chooise,char *nick)
-{
-    Message msg;
-            msg.type=PUBLIC_MESSAGE;
-
-            char *s_msg;
-            char *not_need;
-
-            //start of the string, until the first space not neddet
-            not_need=strtok(chooise," ");
-            //s_msg takes the rest of the string
-            s_msg=strtok(NULL,"");
-
-            //check error on message
-            if(s_msg == NULL){printf(RED"ERROR: You must enter message"RESET);kill(getpid(),SIGUSR1);}
-            
-            //set message
-            strcpy(msg.data,s_msg);
-            strncpy(msg.nickname,nick,24);
-            //send message
-            send(sd,(void*)&msg,sizeof(msg),0);
-}
-
-void create_room(char *chooise, char *nick)
-{   
-    Message msg;
-    msg.type = CREATE_ROOM;
-
-    char *not_need;
-    char *s_name;
-    char *s_pass;
-
-    //start of the string, until the first space not neddet
-    not_need=strtok(chooise," ");
-    s_name=strtok(NULL," ");
-    s_pass=strtok(NULL,"");
-    
-    if (s_name == NULL)
-    {
-        flag_room = 0;
-        printf(RED"ERROR: Format is /c <name> <pass>\n"RESET);     
-    
-    }else if(strlen(s_name)>24)
-    {
-        flag_room = 0;
-        printf(RED"ERROR: room_name must have max 24 characters\n"RESET);
-    
-    }else if(s_pass == NULL)
-    {
-        flag_room = 0;
-        printf(RED"ERROR: Format is /c <name> <password>\n"RESET);
-    
-    }else if(strlen(s_pass)>24)
-    {
-        flag_room = 0;
-        printf(RED"ERROR: Password must have max 24 characters\n"RESET);
-    }
-    else
-    {
-        strncpy(msg.nickname,nick,24);
-        strncpy(msg.rm_name,s_name,24);
-        strncpy(msg.rm_pswd,s_pass,24);
-
-        send(sd,(void *)&msg,sizeof(msg),0);
-        printf(CYN"Successful room join\n"RESET);
-    }
-    
-
-}
-
-void join_room(char *chooise)
-{
-    Message msg;
-    msg.type=JOIN_ROOM;
-
-    char *not_need;
-    char *s_name;
-    char *s_pass;
-
-    //start of the string, until the first space not neddet
-    not_need=strtok(chooise," ");
-    s_name=strtok(NULL," ");
-    s_pass=strtok(NULL,"");
-    
-    if (s_name == NULL)
-    {
-        printf(RED"ERROR: Format is /j <name> <pass>\n"RESET);
-        flag_room = 0;
-    
-    }else if(strlen(s_name)>24)
-    {
-        printf(RED"ERROR: room_name must have max 24 characters\n"RESET);
-        flag_room = 0;
-    
-    }else if(s_pass == NULL)
-    {
-        printf(RED"ERROR: Format is /j <name> <password>\n"RESET);
-        flag_room = 0;
-
-    }else if(strlen(s_pass)>24)
-    {
-        printf(RED"ERROR: Password must have max 24 characters\n"RESET);
-        flag_room = 0;
-    }
-    else
-    {
-        strncpy(msg.rm_name,s_name,24);
-        strncpy(msg.rm_pswd,s_pass,24);
-
-        send(sd,(void *)&msg,sizeof(msg),0);
-    }
-}
-
-void exit_room()
-{
-    Message msg;
-    msg.type = EXIT_ROOM;
-
-    send(sd,(void *)&msg,sizeof(msg),0);
-}
-
-void send_room(char *chooise,char *nick)
-{
-    Message msg;
-    msg.type=MSG_ROOM;
-  
-    //set message
-    strcpy(msg.data,chooise);
-    strncpy(msg.nickname,nick,24);
-    //send message
-    send(sd,(void*)&msg,sizeof(msg),0);       
-}
-
-void list_room()
-{
-    Message msg;
-    msg.type= LIST_ROOM;
-
-    printf(CYN"List all room\n"RESET);
-    send(sd,(void*)&msg,sizeof(msg),0);
 }

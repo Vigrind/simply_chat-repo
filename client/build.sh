@@ -2,4 +2,4 @@
 
 gcc -Wall -pthread -o client \
   ../flagmsg/st_msg.c \
-  client.c
+  menu.c client.c
