@@ -1,3 +1,10 @@
+/*
+ * @Author: Vigrind 
+ * @Date: 2021-04-18 17:30:32 
+ * @Last Modified by: Vigrind
+ * @Last Modified time: 2021-04-18 23:24:43
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,14 +17,14 @@
 #include "../flagmsg/st_msg.h"
 
 //color
-#define RED  "\x1B[0;31m"
-#define GRN  "\x1B[22;32m"
 #define YEL  "\x1B[0;33m"
 #define BLU  "\x1B[0;34m"
 #define MAG  "\x1B[0;35m"
 #define UMAG  "\x1B[4;35m"
-#define CYN  "\x1B[0;36m"
+#define RED  "\x1B[0;31m"
 #define WHT  "\x1B[0;37m"
+#define GRN  "\x1B[0;32m"
+#define CYN  "\x1B[0;36m"
 #define RESET "\033[0m"
 
 //functions
@@ -39,6 +46,7 @@ void create_room(char *chooise, char *nick);
 void join_room(char *chooise);
 void exit_room();
 void send_room(char *chooise,char *nick);
+void list_room();
 
 //thread function
 void *t_recive_message(void *arg);
@@ -99,7 +107,7 @@ void take_input()
         {
             help();
 
-        }else if(choise[0]=='@')
+        }else if(choise[0]=='-')
         {
             send_private_message(choise);
 
@@ -107,6 +115,10 @@ void take_input()
         {
             send_list_all();
             
+        }else if(strcmp(choise,"/rl")==0 && flag_room == 0)
+        {
+            list_room();
+
         }else if(strncmp(choise,"/p",2)==0 && flag_room == 0)
         {
             send_public_message(choise,nickname);
@@ -115,7 +127,7 @@ void take_input()
         {
             flag_room = 1;
             create_room(choise,nickname);
-        
+
         }else if (strncmp(choise,"/j",2)==0 && flag_room == 0)
         {
             flag_room = 1;
@@ -127,7 +139,7 @@ void take_input()
             exit_room();
             printf(CYN"Exit from the room\n"RESET);
         
-        }else if (strncmp(choise,"/p",2)==0 && flag_room == 1)
+        }else if (choise[0]!='\0' && flag_room == 1)
         {
             send_room(choise,nickname);
         }
@@ -175,7 +187,6 @@ void print_menu()
            CYN"Welcome to symply chat\n"RESET
            YEL"**********************\n"RESET
            "Type"BLU" /help "RESET"to see all the option\n"
-           "usage"BLU" @<nickname> <message> "RESET"for send private message\n"
            "First choose a nickname: ");
     fflush(stdout);
 }
@@ -218,7 +229,6 @@ void *t_recive_message(void *arg)
     {
         Message msg;
         ssize_t bytes_returned;
-        int number_client;
         
         //recive data from the server
         bytes_returned = recv(sd,(void*)&msg,sizeof(msg),0);
@@ -227,34 +237,20 @@ void *t_recive_message(void *arg)
         switch (msg.type)
         {
         case LIST_ALL_CLIENT:
+           
+            printf(MAG"%s\n"RESET,msg.nickname);
+            fflush(stdout);
+            break;
         
-            //convert msg.data that contains number of client
-            number_client=atoi(msg.data);
-            
-            if(number_client > 0)
-            {
-                printf(CYN"List of all client connected\n"RESET);
-                while(number_client > 0)
-                {
-                    bytes_returned = recv(sd,(void*)&msg,sizeof(msg),0);
-                    if(bytes_returned<=0) {printf(RED"Cannot recive data from server\n"RESET); quit();}
-                    
-                    printf(MAG"%s\n"RESET,msg.nickname);
-                    fflush(stdout);
-                    number_client--;
-                }
-                printf(CYN"End of list\n"RESET);
-                fflush(stdout);
-            }else
-            {
-                printf("No one is connected\n");
-            }
-            
+        case ENDL_LIST_C:
+
+            printf(CYN"End of list\n"RESET);
+            fflush(stdout);
             break;
         
         case PRIVATE_MESSAGE:
             
-            printf(YEL"%s:"RESET BLU"%s\n"RESET,msg.nickname,msg.data);
+            printf(YEL"%s:" BLU"%s\n"RESET,msg.nickname,msg.data);
             fflush(stdout);
             break;
         
@@ -266,9 +262,8 @@ void *t_recive_message(void *arg)
         
         case JOIN_ROOM:
             
-            printf(CYN"Successful room join\n"RESET);
+            printf(CYN"Successful room[%s] join\n"RESET,msg.rm_name);
             fflush(stdout);
-
             break;
         
         case FULL_ROOM:
@@ -276,7 +271,6 @@ void *t_recive_message(void *arg)
             flag_room = 0;
             printf(CYN"cannot join, the room is full\n"RESET);
             fflush(stdout);
-
             break;
         
         case ROOM_NOT_EXISTS:
@@ -284,7 +278,6 @@ void *t_recive_message(void *arg)
             flag_room = 0;
             printf(CYN"The room doesn't exists\n"RESET);
             fflush(stdout);
-
             break;
         
         case WRONG_PWSD:
@@ -292,16 +285,24 @@ void *t_recive_message(void *arg)
             flag_room = 0;
             printf(CYN"Wrong Password\n"RESET);
             fflush(stdout);
-
             break;
         
         case MSG_ROOM:
             
-            printf(MAG"Public room mex from"YEL"[%s]:"RED"%s\n"RESET,msg.nickname,msg.data);
+            printf(MAG"Room:"YEL"[%s]:"RED"%s\n"RESET,msg.nickname,msg.data);
             fflush(stdout);
             break;
 
+        case LIST_ROOM:
+            printf(YEL"%s\n"RESET,msg.rm_name);
+            fflush(stdout);
             break;
+        
+        case END_LIST_R:
+            printf(CYN"End of list\n"RESET);
+            fflush(stdout);
+            break;
+        
         default:
             break;
         }
@@ -319,10 +320,12 @@ void quit()
 void help()
 {
     printf(BLU"\n/l"RESET":list all client\n"
-                   BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
-                   BLU"/p"RESET":send public message: usage"BLU" /p <message>\n"RESET
-                   BLU"/c"RESET":create a private room: usage"BLU"/c <name> <password>\n"RESET
-                   BLU"/j"RESET":join a room: usage"BLU" /j <room_name> <room_passwd>\n"RESET);
+           BLU"[CTRL+C] or [CTRL+/]"RESET":exit\n"
+           BLU"/p"RESET":send public message:"BLU" /p <message>\n"RESET
+           BLU"/c"RESET":create a private room:"BLU"/c <name> <password>\n"RESET
+           BLU"/j"RESET":join a room:"BLU" /j <room_name> <room_passwd>\n"RESET
+           BLU"-"RESET":send private message:"BLU" -<nickname> <message>\n"RESET
+           BLU"/rl"RESET":list all room\n");
 } 
 
 void send_private_message(char *chooise)
@@ -360,6 +363,7 @@ void send_list_all()
 
     //prepare the srtucture to send 
     send(sd,(void*)&msg,sizeof(msg),0);
+    printf(CYN"List all client\n"RESET);
 }
 
 void send_public_message(char *chooise,char *nick)
@@ -401,18 +405,22 @@ void create_room(char *chooise, char *nick)
     
     if (s_name == NULL)
     {
+        flag_room = 0;
         printf(RED"ERROR: Format is /c <name> <pass>\n"RESET);     
     
     }else if(strlen(s_name)>24)
     {
+        flag_room = 0;
         printf(RED"ERROR: room_name must have max 24 characters\n"RESET);
     
     }else if(s_pass == NULL)
     {
+        flag_room = 0;
         printf(RED"ERROR: Format is /c <name> <password>\n"RESET);
     
     }else if(strlen(s_pass)>24)
     {
+        flag_room = 0;
         printf(RED"ERROR: Password must have max 24 characters\n"RESET);
     }
     else
@@ -422,6 +430,7 @@ void create_room(char *chooise, char *nick)
         strncpy(msg.rm_pswd,s_pass,24);
 
         send(sd,(void *)&msg,sizeof(msg),0);
+        printf(CYN"Successful room join\n"RESET);
     }
     
 
@@ -443,7 +452,7 @@ void join_room(char *chooise)
     
     if (s_name == NULL)
     {
-        printf(RED"ERROR: Format is /c <name> <pass>\n"RESET);
+        printf(RED"ERROR: Format is /j <name> <pass>\n"RESET);
         flag_room = 0;
     
     }else if(strlen(s_name)>24)
@@ -453,7 +462,7 @@ void join_room(char *chooise)
     
     }else if(s_pass == NULL)
     {
-        printf(RED"ERROR: Format is /c <name> <password>\n"RESET);
+        printf(RED"ERROR: Format is /j <name> <password>\n"RESET);
         flag_room = 0;
 
     }else if(strlen(s_pass)>24)
@@ -482,27 +491,19 @@ void send_room(char *chooise,char *nick)
 {
     Message msg;
     msg.type=MSG_ROOM;
+  
+    //set message
+    strcpy(msg.data,chooise);
+    strncpy(msg.nickname,nick,24);
+    //send message
+    send(sd,(void*)&msg,sizeof(msg),0);       
+}
 
-    char *s_msg;
-    char *not_need;
+void list_room()
+{
+    Message msg;
+    msg.type= LIST_ROOM;
 
-    //start of the string, until the first space not neddet
-    not_need=strtok(chooise," ");
-    //s_msg takes the rest of the string
-    s_msg=strtok(NULL,"");
-
-    //check error on message
-    if(s_msg == NULL)
-    {
-        printf(RED"ERROR: You must enter message"RESET);
-            
-    }else
-    {
-        //set message
-        strcpy(msg.data,s_msg);
-        strncpy(msg.nickname,nick,24);
-        //send message
-        send(sd,(void*)&msg,sizeof(msg),0);
-    }
-            
+    printf(CYN"List all room\n"RESET);
+    send(sd,(void*)&msg,sizeof(msg),0);
 }

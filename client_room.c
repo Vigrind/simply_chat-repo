@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "manage_client.h"
+#include "client_room.h"
 
 //client functions
 Client* insert(char *ip,int sd)
@@ -67,11 +67,8 @@ int delete_room(Room **now,Room **root,char *name)
 {   
     Room *delete = (*now);
 
-    printf("delete name:%s\n",delete->name);//DEBUG
-
     if (delete == NULL)
     {
-        printf("NULL\n");//DEBUG
         return 1;
     }
      
@@ -132,51 +129,50 @@ int associate_c_r(Room *nowptr, char *r_name, char *passw, Client *client)
             {
                 while (i<100)
                 {
-                    if (nowptr->c_list[i] != NULL)
-                    {
-                        printf("CLIENT_LSIT_NAME:%s, AT POSITION:[%d]\n",nowptr->c_list[i]->nickname,i);//DEBUG
-                    }
-
                     if (nowptr->c_list[i] == NULL)
                     {
-                        printf("client name:%s\n",client->nickname);//DEBUG
-                        printf("Client_list_positiom:%d\n",i);//DEBUG
                         client->chat_room = nowptr;
                         nowptr->c_list[i] = client;
-                        printf("Room_client_list_name:%s\n",nowptr->c_list[i]->nickname);//DEBUG
-                        return 1;
+                        return J_ROOM;
                     }
                     i++;
                 }     
                 
             }else
             {
-                return 3;
+                return W_PSWD;
             }
             
-            return 2;
+            return F_ROOM;
         }
         
         nowptr=nowptr->previusPtr;
     }
 
-    return 0;
+    return N_EXISTS;
 }
 
 void exit_room(Client *current, char *r_name, Room *nowPtr)
 {
+    //start from the tail of Room_list
     while (nowPtr != NULL)
     {
         if (strcmp(nowPtr->name,r_name)==0)
         {
+            //scroll array c_list
+            //if the element != NULL control is nickname
+            //if the nickname is == to nickname of the client, separate the client from the list
             for (size_t i = 0; i < 100; i++)
             {
-                if (strcmp(current->nickname,nowPtr->c_list[i]->nickname)==0)
+                if (nowPtr->c_list[i]!= NULL)
                 {
-                    current->chat_room = NULL;
-                    nowPtr->c_list[i] = NULL;
-                    return;
-                }
+                    if (strcmp(current->nickname,nowPtr->c_list[i]->nickname)==0)
+                    {
+                        current->chat_room = NULL; //set pointer to NULL, the client is no longer associated
+                        nowPtr->c_list[i] = NULL; //the room is no longer associated to the client
+                        return;
+                    }
+                }    
                 
             }
             
@@ -184,35 +180,33 @@ void exit_room(Client *current, char *r_name, Room *nowPtr)
         
         nowPtr=nowPtr->previusPtr;
     }
-    return;
 }
 
 void ck_empty_room(Room **now, Room **root, char *r_name)
 {
+    //start at the tail of the Room list
     Room *search=(*now);
 
     while (search != NULL)
     {
         if (strcmp(search->name,r_name)==0)
         {
+            //if there is 1 element != NULL in the c_list return
+            //if all element is == to NULL, exit from the for and delete the room
             for (size_t i = 0; i < 100; i++)
             {
                 if (search->c_list[i]!=NULL)
                 {
-                    printf("esco dal check\n");//DEBUG
                     return;
                 }
                 
             }
 
-            //if the c_list is empty, exit from the room
-            printf("Entro nel delete\n");//DEBUG
-            delete_room(now,root,r_name);
-            printf("esco del check_dopo il delete\n");//DEBUG
-            return;
-                 
+            delete_room(now,root,r_name);           
+            return;        
         }
         
+        search=search->previusPtr;
     }
     
 }

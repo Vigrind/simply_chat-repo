@@ -13,10 +13,12 @@ typedef enum em_type{
     ROOM_NOT_EXISTS,
     FULL_ROOM,
     WRONG_PWSD,
-    MSG_ROOM 
+    MSG_ROOM,
+    LIST_ROOM,
+    END_LIST_R,
+    ENDL_LIST_C
 
 }message_type;
-
 
 typedef struct message {
     

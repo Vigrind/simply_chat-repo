@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "st_msg.h": "c"
+        "st_msg.h": "c",
+        "iosfwd": "c",
+        "limits": "c",
+        "streambuf": "c"
     }
 }
