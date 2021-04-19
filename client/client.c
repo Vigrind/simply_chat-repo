@@ -194,6 +194,7 @@ void *t_recive_message(void *arg)
 
         switch (msg.type)
         {
+            
         case LIST_ALL_CLIENT:
            
             printf(MAG"%s\n"RESET,msg.nickname);

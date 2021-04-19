@@ -11,6 +11,7 @@ void print_menu()
            "Type"BLU" /help "RESET"to see all the option\n"
            "First choose a nickname: ");
     fflush(stdout);
+    
 }
 
 void help()

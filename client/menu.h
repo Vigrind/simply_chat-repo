@@ -13,7 +13,6 @@
 #define CYN  "\x1B[0;36m"
 #define RESET "\033[0m"
 
-
 //menu function
 void print_menu();
 void help();
