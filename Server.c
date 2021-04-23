@@ -29,8 +29,7 @@
 
 //light
 pthread_mutex_t mutex_client_list = PTHREAD_MUTEX_INITIALIZER;  //mutex when work with the client list
-pthread_mutex_t mutex_room_list = PTHREAD_MUTEX_INITIALIZER;    //mutex when work with the room list
-pthread_mutex_t mutex_send_all = PTHREAD_MUTEX_INITIALIZER;     //mutex when send message to all client     
+pthread_mutex_t mutex_room_list = PTHREAD_MUTEX_INITIALIZER;    //mutex when work with the room list  
 pthread_mutex_t mutex_room_all = PTHREAD_MUTEX_INITIALIZER;     //mutex when send message into the room
 
 //global vairable
@@ -59,10 +58,14 @@ void send_all_client_nick(int sd, char *my_nick);
 ssize_t send_public_message(char *chat, char *sent_from,char *my_nick);
 
 //send message into the room
-void send_all_room(char *chat, char *sent_from, char *room_name);
+void send_all_room(char *chat, char *sent_from, Room *my_room);
 
 //list all room
 void room_list(int sd);
+
+//check if the nickname already exist 
+int ck_c_name(char *c_nick);
+;
 
 int main()
 {
@@ -171,14 +174,17 @@ void *manage_thread(void *arg)
     //cast arg
     Client *t_client = (Client*)arg;   
 
-    //nuber of byte returned by recv
+    //nuber of byte returned by recv and send
     ssize_t nread; 
 
     //message send
     Message msg;
 
-    //for check function in case:EXIT_ROOM
+    //input of function ck_empty_room in case:EXIT_ROOM
     char c_room_name[25];
+
+    //take the result ok function ck_c_name
+    int result_c_name;
 
     while (recv(t_client->t_sd,NULL,1,MSG_PEEK | MSG_DONTWAIT)!=0)
     {
@@ -189,11 +195,19 @@ void *manage_thread(void *arg)
         {
         case SET_NICKNAME:
             
-            //save nickname
-            strcpy(t_client->nickname,msg.nickname);
-            printf("New connection from: [%s]\n",t_client->nickname);
+            if ((result_c_name=ck_c_name(msg.nickname))==0)
+            {
+                strcpy(msg.data,"user_ok");
+                send(t_client->t_sd,(void*)&msg,sizeof(msg),0);
+                strcpy(t_client->nickname,msg.nickname);
+                printf("New connection from: [%s]\n",t_client->nickname);
+            }else
+            {
+                strcpy(msg.data,"user_no");
+                send(t_client->t_sd,(void*)&msg,sizeof(msg),0);
+            }
             break;
-        
+
         case PRIVATE_MESSAGE:
             
             //send private message
@@ -211,9 +225,9 @@ void *manage_thread(void *arg)
         
         case PUBLIC_MESSAGE:
             
-            pthread_mutex_lock(&mutex_send_all);
+            pthread_mutex_lock(&mutex_client_list);
             if((nread=send_public_message(msg.data,msg.nickname,t_client->nickname))<0){perror(RED"\nCannot send data to client"RESET);}
-            pthread_mutex_unlock(&mutex_send_all);
+            pthread_mutex_unlock(&mutex_client_list);
 
             break;
         
@@ -257,14 +271,14 @@ void *manage_thread(void *arg)
         case MSG_ROOM:
             
             pthread_mutex_lock(&mutex_room_all);
-            send_all_room(msg.data,msg.nickname,t_client->chat_room->name);
+            send_all_room(msg.data,msg.nickname,t_client->chat_room);
             pthread_mutex_unlock(&mutex_room_all);
             break;
 
         case EXIT_ROOM:
 
             pthread_mutex_lock(&mutex_room_list);            
-            exit_room(t_client,t_client->chat_room->name,r_now);
+            exit_room(t_client,t_client->chat_room);
             ck_empty_room(&r_now,&r_root,c_room_name);
             pthread_mutex_unlock(&mutex_room_list);
         
@@ -289,10 +303,10 @@ void *manage_thread(void *arg)
     }
 
     //if the room is empty, delete the room
-    if(c_room_name != NULL && t_client->chat_room != NULL)
+    if(t_client->chat_room != NULL)
     {
         pthread_mutex_lock(&mutex_room_list);            
-        exit_room(t_client,c_room_name,r_now);
+        exit_room(t_client,t_client->chat_room);
         ck_empty_room(&r_now,&r_root,c_room_name);
         pthread_mutex_unlock(&mutex_room_list);
     }
@@ -412,7 +426,7 @@ ssize_t send_public_message(char *chat, char *sent_from, char *my_nick)
     return bytes_retured;
 }
 
-void send_all_room(char *chat, char *sent_from, char *room_name)
+void send_all_room(char *chat, char *sent_from, Room *my_room)
 {
     //set Message struct
     Message msg;
@@ -422,29 +436,19 @@ void send_all_room(char *chat, char *sent_from, char *room_name)
 
     //byte send
     ssize_t byte_send;
-    
-    //start from the tail of the Room list
-    //set pointer for scroll the list
-    Room *find = r_now;
 
-    //search the name of the room
-    while (find != NULL)
+    if (my_room != NULL)
     {
-        if (strcmp(find->name,room_name)==0)
-        {
-            //iterate over each element of array c_list
-            //send message if the element is not null
-            for (size_t i = 0; i < 100; i++)
-            {  
-                if (find->c_list[i] != NULL)
-                {
-                    if((byte_send=send(find->c_list[i]->t_sd,(void*)&msg,sizeof(msg),0))<0){printf(RED"ERROR: Inpossibile send data to client\n"RESET);}
-                }
-            }            
-        }
-        find=find->previusPtr;
-    }
-    
+        //iterate over each element of array c_list
+        //send message if the element is not null
+        for (size_t i = 0; i < 100; i++)
+        {   
+            if (my_room->c_list[i] != NULL)
+            {
+                if((byte_send=send(my_room->c_list[i]->t_sd,(void*)&msg,sizeof(msg),0))<0){printf(RED"ERROR: Inpossibile send data to client\n"RESET);}
+            }      
+        }   
+    } 
 }
 
 void room_list(int sd)
@@ -466,4 +470,22 @@ void room_list(int sd)
         if((byte_send=send(sd,(void *)&msg,sizeof(msg),0))<0) {printf(RED"ERROR: Inpossibile send data to client\n"RESET);}
         list = list->previusPtr;
     }
+}
+
+int ck_c_name(char *c_nick)
+{
+    Client *search = now;
+
+    while (search != NULL)
+    {   
+        if (strcmp(search->nickname,c_nick)==0)
+        {
+            
+            return 1; //if the nickname isn't available return 1
+        }
+        
+        search=search->previusPtr;
+    }
+    
+    return 0; //if the nickname is available return 0
 }

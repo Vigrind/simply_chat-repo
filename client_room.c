@@ -152,33 +152,23 @@ int associate_c_r(Room *nowptr, char *r_name, char *passw, Client *client)
     return N_EXISTS;
 }
 
-void exit_room(Client *current, char *r_name, Room *nowPtr)
+void exit_room(Client *current, Room *my_room)
 {
-    //start from the tail of Room_list
-    while (nowPtr != NULL)
+    //scroll array c_list
+    //if the element != NULL control is nickname
+    //if the nickname is == to nickname of the client, separate the client from the list
+    for (size_t i = 0; i < 100; i++)
     {
-        if (strcmp(nowPtr->name,r_name)==0)
+        if (my_room->c_list[i]!= NULL)
         {
-            //scroll array c_list
-            //if the element != NULL control is nickname
-            //if the nickname is == to nickname of the client, separate the client from the list
-            for (size_t i = 0; i < 100; i++)
+            if (strcmp(current->nickname,my_room->c_list[i]->nickname)==0)
             {
-                if (nowPtr->c_list[i]!= NULL)
-                {
-                    if (strcmp(current->nickname,nowPtr->c_list[i]->nickname)==0)
-                    {
-                        current->chat_room = NULL; //set pointer to NULL, the client is no longer associated
-                        nowPtr->c_list[i] = NULL; //the room is no longer associated to the client
-                        return;
-                    }
-                }    
-                
+                current->chat_room = NULL; //set pointer to NULL, the client is no longer associated
+                my_room->c_list[i] = NULL; //the room is no longer associated to the client
+                return;
             }
-            
-        }
-        
-        nowPtr=nowPtr->previusPtr;
+        }    
+                
     }
 }
 

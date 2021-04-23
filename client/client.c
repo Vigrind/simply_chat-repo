@@ -16,11 +16,20 @@
 #include "menu.h"   
 #include "../flagmsg/st_msg.h"
 
+pthread_mutex_t mutex_nick = PTHREAD_MUTEX_INITIALIZER; //mutex for choose_nickname(main thread) and t_recive_message synchronization
+pthread_cond_t cond_nick = PTHREAD_COND_INITIALIZER;    //condition variable for choose_nickname(main thread) and t_recive_message synchronization
+
 //functions
-void initialize_connection(struct sockaddr_in*);
-void take_input();
+void initialize_connection(struct sockaddr_in *server);
 void handler(int sig);
+
+//client start
+void take_input();
+
+//choose a nickname
 void chose_nickname(char *nick);
+
+//exit from the application
 void quit();
 
 //thread function
@@ -28,6 +37,7 @@ void *t_recive_message(void *arg);
 
 //global variable
 int sd;
+int user_ok=0;
 int flag_room = 0;
 
 int main()
@@ -66,11 +76,12 @@ void take_input()
     char nickname[1024];//temporary solution
     char choise[1024];
     print_menu();
-    chose_nickname(nickname);
-
+    
     //create a thread that wait in backgroud the message from the server
     pthread_t tid;
     pthread_create(&tid,NULL,t_recive_message,NULL);
+
+    chose_nickname(nickname);
 
     while(1)
     {
@@ -152,10 +163,32 @@ void handler(int sig)
 void chose_nickname(char *nick)
 {
     Message msg;
+    int count = 0;
 
     while (1)
-    {
-        fgets(nick,1024,stdin);//temporary solution
+    {   
+        //first input don't need mutex
+        if (count == 0)
+        {
+            fgets(nick,1024,stdin);//temporary solution
+        }else
+        {
+            //wait for the result of t_recive_message thread, that set user_ok
+            //Use condition variable for passive wait, and best thread synchronization
+            pthread_mutex_lock(&mutex_nick);
+               
+                pthread_cond_wait(&cond_nick,&mutex_nick);        
+               
+                if (user_ok == 1)
+                {
+                    break;
+                }else
+                {
+                    fgets(nick,1024,stdin);//temporary solution
+                }
+        
+            pthread_mutex_unlock(&mutex_nick);
+        }
         
         //remove space or '\n' or '\t' or '\r'
         removen_and_space(nick);
@@ -164,16 +197,16 @@ void chose_nickname(char *nick)
         if(strlen(nick)>24 || strlen(nick)<4)
         {
             printf("The lenght must be between 4 and 24\n");
-
+            count = 0; // if the user choose wrong format for nickname, reset count
         }else
         {
+            count++; 
             //prepare the message
             msg.type=SET_NICKNAME;
             strcpy(msg.nickname,nick);
             
             //send
-            send(sd,(void*)&msg,sizeof(msg),0); 
-            break;       
+            send(sd,(void*)&msg,sizeof(msg),0);    
         }
     }
     
@@ -194,6 +227,26 @@ void *t_recive_message(void *arg)
 
         switch (msg.type)
         {
+        case SET_NICKNAME:
+            
+            pthread_mutex_lock(&mutex_nick);
+                
+                //if the server send that the nickname is available
+                //change user_ok from 0 to 1
+                if (strcmp(msg.data,"user_ok")==0)
+                {
+                    user_ok = 1;
+                    pthread_cond_signal(&cond_nick); //send signal to cond variable in function choose_nickname
+                }else
+                {
+                    pthread_cond_signal(&cond_nick);
+                    printf(RED"L'username è gia esistente\n"RESET); //send signal to cond variable in function choose_nickname
+                    fflush(stdout);
+                }
+            
+            pthread_mutex_unlock(&mutex_nick);
+            
+            break;
             
         case LIST_ALL_CLIENT:
            

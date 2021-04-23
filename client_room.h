@@ -43,7 +43,7 @@ void delete_client(Client **current, Client **now);
 //create Room node 
 void insert_room(Room **root,Room **now, char *name,char *pssw,char *own);
 //separate the client from the room
-void exit_room(Client *current, char *r_name, Room *nowPtr);
+void exit_room(Client *current, Room *my_room);
 //check if the room is empty, in positive case, delete the room
 void ck_empty_room(Room **now, Room **root, char *r_name);
 //delete the room from the Room list
